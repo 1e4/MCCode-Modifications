@@ -43,12 +43,43 @@ class API
      * @param int $requiredLevel
      * @return boolean
      */
-    public function canView($requiredLevel)
+    public function canView($config)
     {
-        if(in_array($this->user['user_level'], $requiredLevel))
+        if(array_key_exists('accessInJail', $config))
         {
-            return true;
+            //If the user is in jail and the page cannot be accessed in jail deny access
+            if($config['accessInJail'] == 0 && $this->inJail())
+            {
+                return $this->accessDenied('jail');
+            }
         }
+        
+        if(array_key_exists('accessInHospital', $config))
+        {
+            //If the user is in hospital and the page cannot be accessed in hospital deny access
+            if($config['accessInHospital'] == 0 && $this->inHospital())
+            {
+                return $this->accessDenied('hospital');
+            }
+        }
+        
+        if(array_key_exists('donator', $config))
+        {
+            if($config['donator'] == 1 && !$this->isDonator())
+            {
+                return $this->accessDenied('donator');
+            }
+        }
+        
+        if(array_key_exists('userlevelRequired', $config))
+        {
+            if(in_array($this->user['user_level'], $config['userlevelRequired']))
+            {
+                return $this->accessDenied('permission');
+            }
+        }
+        
+        return false;
     }
     
     /**
@@ -70,9 +101,25 @@ class API
      * Returns a basic access denied message
      * @return string
      */
-    public function accessDenied()
+    public function accessDenied($state)
     {
-        $output = 'You do not have permission to view this page';
+        
+        if($state == 'jail')
+        {
+            $output = 'You are currently in jail, you cannot access this page while in jail';
+        }
+        elseif($state == 'hospital')
+        {
+            $output = 'You are currently in hospital, you cannot access this page while in hospital';
+        }
+        elseif($state == 'donator')
+        {
+            $output = 'You have to be a donator to access this feature';
+        }
+        else
+        {
+            $output = 'You do not have permission to view this page';
+        }
         
         return $output;
     }
@@ -180,5 +227,21 @@ class API
         {
             return true;
         }
+    }
+    
+    /**
+     * Quick function to put someone in jail
+     * @param type $time
+     * @param type $reason
+     */
+    public function putInJail($time, $reason, $userid = -1)
+    {
+        
+        if($userid == -1)
+        {
+            $userid = $this->user['userid'];
+        }
+        
+        $this->db->query("UPDATE users SET `jail` = {$time}, `jail_reason` = '{$reason}' WHERE userid = '{$userid}'");
     }
 }
