@@ -1,56 +1,59 @@
 <?php
-
 class API
 {
     
     protected $db;
-    protected $user;
+    public $user;
     protected $header;
+    public $set;
+    
+    protected $moduleSettings = array();
+    protected $module;
 
 
     public function __construct() {
         
-        global $db, $ir, $h;
+        global $db, $ir, $h, $set;
         
         $this->db = $db;
+        
         $this->user = $ir;
         $this->header = $h;
+        $this->set = $set;
+                
+//        var_dump($this->user);
     }
     
     /**
-     * Adds an event to the given user
-     * @param string|int $userid Accepts username or UserID
-     * @param type $text
-     * @return boolean
+     * Gives the user an event
+     * @param int $userid
+     * @param string $text
      */
     public function addEvent($userid, $text)
     {
-        
-        //If the userid is a string then convert it to a int
-        if((string) $userid)
-        {
-            $userid = $this->name2id($userid);
-        }
-        
-        $this->db->query("INSERT INTO events (`evUSER`, `evTIME`, `evTEXT`) VALUES ({$userid}, {time()}, {$this->db->escape($text)}");
+        $this->db->query("INSERT INTO events (`evUSER`, `evTIME`, `evTEXT`) VALUES ({$userid}, {time()}, {$text}");
         $this->db->query("UPDATE users SET new_events = new_events+1 WHERE userid = {$userid}");
-        
-        return true;
     }
     
     /**
-     * Checks against the current userlevel for the required, if greater than or equal to then allow access
-     * @param int $requiredLevel
+     * Checks against multiple options
+     * Checks if a donator
+     * Checks if in Jail
+     * Checks if in hospital
+     * Checks if has the required userlevel
+     * 
+     * @param array $config
      * @return boolean
      */
     public function canView($config)
     {
+        
         if(array_key_exists('accessInJail', $config))
         {
             //If the user is in jail and the page cannot be accessed in jail deny access
             if($config['accessInJail'] == 0 && $this->inJail())
             {
-                return $this->accessDenied('jail');
+                return 'jail';
             }
         }
         
@@ -59,7 +62,7 @@ class API
             //If the user is in hospital and the page cannot be accessed in hospital deny access
             if($config['accessInHospital'] == 0 && $this->inHospital())
             {
-                return $this->accessDenied('hospital');
+                return 'hospital';
             }
         }
         
@@ -67,23 +70,33 @@ class API
         {
             if($config['donator'] == 1 && !$this->isDonator())
             {
-                return $this->accessDenied('donator');
+                return 'donator';
             }
         }
-        
+
+        if(array_key_exists('brave_cost', $config))
+        {
+            if($this->user['brave'] < $config['brave_cost'])
+            {
+                return 'brave';
+            }
+        }
+
         if(array_key_exists('userlevelRequired', $config))
         {
             if(in_array($this->user['user_level'], $config['userlevelRequired']))
             {
-                return $this->accessDenied('permission');
+                return true;
             }
+            
+            return false;
         }
         
-        return false;
+        return true;
     }
     
     /**
-     * Checks if the user is logged in, returns true if they are
+     * Checks if the user is logged in
      * @return boolean
      */
     public function isLoggedIn()
@@ -116,6 +129,10 @@ class API
         {
             $output = 'You have to be a donator to access this feature';
         }
+        elseif($state == 'brave')
+        {
+            $output = 'You need more brave for this task';
+        }
         else
         {
             $output = 'You do not have permission to view this page';
@@ -134,17 +151,18 @@ class API
     }
     
     /**
-     * Escapes output
-     * @param string $string
+     * Returns whatever was put in as $string wrapped in entities
+     * @todo [15:45:17] Luke: htmlentities($input, ENT_QUOTES, "UTF-8") make it have options
+     * @param string$string
      * @return string
      */
     public function escape($string)
     {
-        return htmlspecialchars($string);
+        return htmlentities($string);
     }
     
     /**
-     * Converts a userid into a username
+     * Changes an ID to a name
      * @param int $id
      * @return string
      */
@@ -163,26 +181,7 @@ class API
     }
     
     /**
-     * Converts a username into an ID
-     * @param string $name
-     * @return int
-     */
-    public function name2id($name)
-    {
-        $query = $this->db->query("SELECT id FROM users WHERE username = {{$this->db->escape($name)} LIMIT 1");
-        
-        if($query->num_rows == 0)
-        {
-            return 'Non existant';
-        }
-        
-        $fetch = $query->fetch_object();
-        
-        return $this->escape($fetch->id);
-    }
-    
-    /**
-     * Outputs a pretty date
+     * Retuns a nice date formatted
      * @param DateTime $date
      * @return string
      */
@@ -194,7 +193,7 @@ class API
     }
     
     /**
-     * Checks if the user is in jail, return true if they are
+     * Returns true if user is in jail
      * @return boolean
      */
     public function inJail()
@@ -206,7 +205,7 @@ class API
     }
     
     /**
-     * Checks if the user is in hospital, returns true if they are
+     * Returns true if user is in hospital
      * @return boolean
      */
     public function inHospital()
@@ -218,12 +217,12 @@ class API
     }
     
     /**
-     * Checks if the user has any donator days remaining, returns true if they do
+     * Returns true if a donator
      * @return boolean
      */
     public function isDonator()
     {
-        if($this->user['donator_days'] > 0)
+        if($this->user['donatordays'] > 0)
         {
             return true;
         }
@@ -244,4 +243,5 @@ class API
         
         $this->db->query("UPDATE users SET `jail` = {$time}, `jail_reason` = '{$reason}' WHERE userid = '{$userid}'");
     }
+    
 }
